@@ -93,18 +93,35 @@ async function saveA(){const rows=Object.entries(A.ed).map(([id,e])=>({id,w:e.w,
 function yearTbl(){const y=A.ym.slice(0,4);return '<table><tr><th>Student</th>'+['J','F','M','A','M','J','J','A','S','O','N','D'].map(m=>`<th>${m}</th>`).join('')+'</tr>'+S.students.map(s=>`<tr><td>${esc(s.name)}</td>`+Array.from({length:12},(_,i)=>{const r=S.att.find(a=>a.sid==s.id&&a.ym==y+'-'+String(i+1).padStart(2,'0'));return `<td>${r?r.present+'/'+r.working:'·'}</td>`}).join('')+'</tr>').join('')+'</table>'}
 /* SHARE */
 const exams=()=>[...new Set(S.marks.map(r=>r.exam))],months=()=>[...new Set(S.att.map(r=>r.ym))].sort().reverse();
-function vShr(){const ps=H.type=='m'?exams():months();if(!ps.includes(H.period))H.period=ps[0]||'';
-return `<div class="card"><h2>Share on WhatsApp</h2><div class="row"><div><label>What to send</label><select onchange="H.type=this.value;H.sent={};draw()"><option value="m" ${H.type=='m'?'selected':''}>Marks</option><option value="a" ${H.type=='a'?'selected':''}>Attendance</option></select></div>
-<div><label>${H.type=='m'?'Exam / Week':'Month'}</label><select onchange="H.period=this.value;H.sent={};sList()">${ps.map(p=>`<option value="${esc(p)}" ${p==H.period?'selected':''}>${esc(pl(p))}</option>`).join('')}</select></div></div>
-<label>Your message — use {name} {data} {period} {type} {college}</label><textarea id="tp" oninput="localStorage.setItem('tp',this.value);sList()">${esc(localStorage.getItem('tp')||DEF)}</textarea>
-<p class="mu">{data} is replaced with each student's ${H.type=='m'?'subject-wise marks & total':'working days, present days & %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Tap <b>Share via WhatsApp</b> on a student: WhatsApp Web opens in one reusable tab with that student's chat and your message ready — press the send arrow there, then come back and tap the next student.</p>
-<p><button class="btn wa" onclick="nextS()">▶ Share with next student</button></p></div><div class="card tw" id="sl"></div>`}
+const skey=()=>'sent:'+H.type+':'+H.period;
+function loadSent(){try{H.sent=JSON.parse(localStorage.getItem(skey())||'{}')}catch(e){H.sent={}}}
+function saveSent(){try{localStorage.setItem(skey(),JSON.stringify(H.sent))}catch(e){}}
 const pl=p=>H.type=='a'&&/^\d{4}-\d\d$/.test(p)?new Date(p+'-01').toLocaleString('en',{month:'long',year:'numeric'}):p;
-function ph(p){let d=String(p||'').replace(/\D/g,'');if(d.length==10)d='91'+d;return d.length>=11?d:''}
-function dataFor(s){if(H.type=='m'){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.period&&x.scored!==null);if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${Math.round(t/m*100)}%)*`}
+function ph(p){let d=String(p||'').replace(/\D/g,'').replace(/^0+/,'');if(d.length==10)d='91'+d;return d.length>=11&&d.length<=15?d:''}
+function vShr(){const ps=H.type=='m'?exams():months();if(!ps.includes(H.period))H.period=ps[0]||'';loadSent();H.mode=H.mode||localStorage.getItem('wmode')||'web';
+return `<div class="card"><h2>Send on WhatsApp</h2><div class="row"><div><label>What to send</label><select onchange="H.type=this.value;H.period='';draw()"><option value="m" ${H.type=='m'?'selected':''}>Marks</option><option value="a" ${H.type=='a'?'selected':''}>Attendance</option></select></div>
+<div><label>${H.type=='m'?'Exam / Week':'Month'}</label><select onchange="H.period=this.value;loadSent();sList()">${ps.map(p=>`<option value="${esc(p)}" ${p==H.period?'selected':''}>${esc(pl(p))}</option>`).join('')}</select></div>
+<div><label>Open with</label><select onchange="H.mode=this.value;localStorage.setItem('wmode',this.value);sList()"><option value="web" ${H.mode=='web'?'selected':''}>WhatsApp Web (computer)</option><option value="app" ${H.mode=='app'?'selected':''}>WhatsApp app (phone)</option></select></div></div>
+<label>Your message — use {name} {data} {period} {type} {college}</label><textarea id="tp" oninput="localStorage.setItem('tp',this.value);sList()">${esc(localStorage.getItem('tp')||DEF)}</textarea>
+<p class="mu">{data} is replaced with each student's ${H.type=='m'?'subject-wise marks &amp; total':'working days, present days &amp; %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Press <b>Send</b> on a student: that student's chat opens in WhatsApp with the message already typed — press the green send arrow there, come back, and press the next student. WhatsApp does not allow a website to press that final arrow for you.</p>
+<p class="row" style="flex:none"><button class="btn wa" onclick="nextS()">▶ Send to next student</button><button class="btn g" onclick="resetSent()">Reset sent status</button></p><p class="mu" id="sc"></p></div><div class="card tw" id="sl"></div><div id="pv"></div>`}
+function dataFor(s){if(H.type=='m'){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.period&&x.scored!==null&&x.scored!=='');if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${Math.round(t/m*100)}%)*`}
 const r=S.att.find(x=>x.sid==s.id&&x.ym==H.period);if(!r)return null;const pc=Math.round(r.present/r.working*100);return `Working days: ${r.working}\nDays present: ${r.present}\n*Attendance: ${pc}%*`+(pc<75?'\n⚠️ Attendance is below 75%.':'')}
-function link(s){const d=dataFor(s),n=ph(s.phone);if(d===null||!n)return null;let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';t=t.replace(/{name}/g,s.name).replace(/{college}/g,COLLEGE).replace(/{period}/g,pl(H.period)).replace(/{type}/g,H.type=='m'?'marks':'attendance').replace(/{data}/g,d);return 'https://web.whatsapp.com/send?phone='+n+'&text='+encodeURIComponent(t)}
-function sList(){$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th></th></tr>'+S.students.map(s=>{const l=link(s);return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone)}</td><td>${l?`<a class="btn ${H.sent[s.id]?'sent':'wa'}" target="whatsapp_web" href="${l}" onclick="H.sent[${s.id}]=1;this.className='btn sent';this.textContent='Shared ✓'">${H.sent[s.id]?'Shared ✓':'💬 Share via WhatsApp'}</a>`:`<span class="mu">${dataFor(s)===null?'No data':'Invalid number'}</span>`}</td></tr>`}).join('')+'</table>'}
-function nextS(){const s=S.students.find(s=>!H.sent[s.id]&&link(s));if(!s)return toast('All done ✓');H.sent[s.id]=1;window.open(link(s),'whatsapp_web');sList()}
+function msg(s){const d=dataFor(s);let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';return t.replace(/{name}/g,()=>s.name).replace(/{college}/g,()=>COLLEGE).replace(/{period}/g,()=>pl(H.period)).replace(/{type}/g,()=>H.type=='m'?'marks':'attendance').replace(/{data}/g,()=>d)}
+function link(s){const d=dataFor(s),n=ph(s.phone);if(d===null||!n)return null;const t=encodeURIComponent(msg(s));return H.mode=='app'?'https://wa.me/'+n+'?text='+t:'https://web.whatsapp.com/send?phone='+n+'&text='+t}
+const tgt=()=>H.mode=='app'?'_blank':'whatsapp_web';
+function st(s){if(dataFor(s)===null)return 'nodata';if(!ph(s.phone))return 'badnum';return H.sent[s.id]?'sent':'ready'}
+function sList(){const rows=S.students.map(s=>({s,k:st(s)})),c=k=>rows.filter(r=>r.k==k).length,w=H.type=='m'?'marks':'attendance';
+$('#sc').innerHTML=`<b>${c('sent')}</b> sent · <b>${c('ready')}</b> ready · <b>${c('nodata')}</b> no ${w} entered · <b>${c('badnum')}</b> invalid number`;
+$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th>Status</th><th></th></tr>'+rows.map(({s,k})=>{let act='',status='';
+if(k=='nodata'){status=`<span class="bad">No ${w} for this ${H.type=='m'?'exam':'month'}</span>`;act=`<button class="btn g" onclick="goData()">Enter ${w}</button>`}
+else if(k=='badnum'){status='<span class="bad">Invalid number</span>'}
+else{status=k=='sent'?'<span class="ok">Sent ✓</span>':'<span class="mu">Ready</span>';act=`<a class="btn ${k=='sent'?'sent':'wa'}" target="${tgt()}" href="${esc(link(s))}" onclick="markSent(${s.id})">${k=='sent'?'Send again':'💬 Send'}</a> <button class="btn g" onclick="showPv(${s.id})">Preview</button>`}
+return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone)}</td><td>${status}</td><td>${act}</td></tr>`}).join('')+'</table>'}
+function markSent(id){H.sent[id]=1;saveSent();setTimeout(sList,200)}
+function nextS(){const s=S.students.find(s=>!H.sent[s.id]&&link(s));if(!s)return toast('All done ✓');window.open(link(s),tgt());H.sent[s.id]=1;saveSent();sList();toast('Chat opened for '+s.name+' — press send in WhatsApp')}
+function resetSent(){if(!confirm('Mark everyone as not sent for this list?'))return;H.sent={};saveSent();sList()}
+function showPv(id){const s=S.students.find(x=>x.id==id);$('#pv').innerHTML=`<div class="card"><h2>Preview — ${esc(s.name)}</h2><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(msg(s))}</pre><p><button class="btn g" onclick="$('#pv').innerHTML=''">Close</button></p></div>`;$('#pv').scrollIntoView({behavior:'smooth'})}
+function goData(){if(H.type=='m'){tab='mrk';M.exam=H.period;loadEx(H.period)}else{tab='att';A.ym=H.period}draw()}
 init();
 </script></body></html>
