@@ -40,8 +40,8 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const COLLEGE='Viswasai Junior College, RR Campus, Nellore';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let S={students:[],marks:[],att:[]},tab='stu';
-const M={exam:'',subs:[{n:'',max:100}],sc:{}},A={ym:new Date().toISOString().slice(0,7),ed:{}},H={type:'m',period:'',sent:{}};
-const DEF="Dear Parent,\n\nGreetings from {college}.\nHere is the {type} report of {name} ({period}):\n\n{data}\n\nKindly review and contact the college for any queries.\n\nRegards,\nJunior Lecturer";
+const M={exam:'',subs:[{n:'',max:100}],sc:{}},A={ym:new Date().toISOString().slice(0,7),ed:{}},H={type:'b',exam:'',month:'',sent:{}};
+const DEF="Dear Parent,\n\nGreetings from *{college}*.\n\n📋 Here is the {type} report of *{name}* ({period}):\n\n{data}\n\nKindly review and contact the college for any queries.\n\nRegards,\nJunior Lecturer";
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)};
 const ck=r=>{if(r.error)throw new Error(r.error.message);return r.data};
 async function fetchAll(table,cols){let all=[],from=0;const N=1000;for(;;){const d=ck(await sb.from(table).select(cols).order('id').range(from,from+N-1));all=all.concat(d);if(d.length<N)break;from+=N}return all}
@@ -93,35 +93,45 @@ async function saveA(){const rows=Object.entries(A.ed).map(([id,e])=>({id,w:e.w,
 function yearTbl(){const y=A.ym.slice(0,4);return '<table><tr><th>Student</th>'+['J','F','M','A','M','J','J','A','S','O','N','D'].map(m=>`<th>${m}</th>`).join('')+'</tr>'+S.students.map(s=>`<tr><td>${esc(s.name)}</td>`+Array.from({length:12},(_,i)=>{const r=S.att.find(a=>a.sid==s.id&&a.ym==y+'-'+String(i+1).padStart(2,'0'));return `<td>${r?r.present+'/'+r.working:'·'}</td>`}).join('')+'</tr>').join('')+'</table>'}
 /* SHARE */
 const exams=()=>[...new Set(S.marks.map(r=>r.exam))],months=()=>[...new Set(S.att.map(r=>r.ym))].sort().reverse();
-const skey=()=>'sent:'+H.type+':'+H.period;
+const mon=p=>/^\d{4}-\d\d$/.test(p)?new Date(p+'-01').toLocaleString('en',{month:'long',year:'numeric'}):p;
+const skey=()=>'sent:'+(H.m?H.exam:'-')+'|'+(H.a?H.month:'-');
 function loadSent(){try{H.sent=JSON.parse(localStorage.getItem(skey())||'{}')}catch(e){H.sent={}}}
 function saveSent(){try{localStorage.setItem(skey(),JSON.stringify(H.sent))}catch(e){}}
-const pl=p=>H.type=='a'&&/^\d{4}-\d\d$/.test(p)?new Date(p+'-01').toLocaleString('en',{month:'long',year:'numeric'}):p;
 function ph(p){let d=String(p||'').replace(/\D/g,'').replace(/^0+/,'');if(d.length==10)d='91'+d;return d.length>=11&&d.length<=15?d:''}
-function vShr(){const ps=H.type=='m'?exams():months();if(!ps.includes(H.period))H.period=ps[0]||'';loadSent();H.mode=H.mode||localStorage.getItem('wmode')||'web';
-return `<div class="card"><h2>Send on WhatsApp</h2><div class="row"><div><label>What to send</label><select onchange="H.type=this.value;H.period='';draw()"><option value="m" ${H.type=='m'?'selected':''}>Marks</option><option value="a" ${H.type=='a'?'selected':''}>Attendance</option></select></div>
-<div><label>${H.type=='m'?'Exam / Week':'Month'}</label><select onchange="H.period=this.value;loadSent();sList()">${ps.map(p=>`<option value="${esc(p)}" ${p==H.period?'selected':''}>${esc(pl(p))}</option>`).join('')}</select></div>
+function tgl(k,v){H[k]=v;if(!H.m&&!H.a){H[k]=true;toast('Select at least one: marks or attendance')}draw()}
+async function refreshS(){await reload();draw();toast('Data refreshed ✓')}
+function vShr(){if(H.m===undefined){H.m=true;H.a=false}const ex=exams(),mo=months();if(!ex.includes(H.exam))H.exam=ex[0]||'';if(!mo.includes(H.month))H.month=mo[0]||'';loadSent();H.mode=H.mode||localStorage.getItem('wmode')||'web';
+const ck='style="width:auto;margin-right:8px"';
+return `<div class="card"><h2>Send on WhatsApp</h2><p class="mu" style="margin-top:0">Marks and attendance are taken automatically from the saved records. Tick what you want to send — marks, attendance, or both in one message.</p>
+<div class="row"><div><label><input type="checkbox" ${ck} ${H.m?'checked':''} onchange="tgl('m',this.checked)">Include marks</label><select ${H.m?'':'disabled'} onchange="H.exam=this.value;loadSent();sList()">${ex.map(p=>`<option value="${esc(p)}" ${p==H.exam?'selected':''}>${esc(p)}</option>`).join('')||'<option>No marks saved yet</option>'}</select></div>
+<div><label><input type="checkbox" ${ck} ${H.a?'checked':''} onchange="tgl('a',this.checked)">Include attendance</label><select ${H.a?'':'disabled'} onchange="H.month=this.value;loadSent();sList()">${mo.map(p=>`<option value="${esc(p)}" ${p==H.month?'selected':''}>${esc(mon(p))}</option>`).join('')||'<option>No attendance saved yet</option>'}</select></div>
 <div><label>Open with</label><select onchange="H.mode=this.value;localStorage.setItem('wmode',this.value);sList()"><option value="web" ${H.mode=='web'?'selected':''}>WhatsApp Web (computer)</option><option value="app" ${H.mode=='app'?'selected':''}>WhatsApp app (phone)</option></select></div></div>
 <label>Your message — use {name} {data} {period} {type} {college}</label><textarea id="tp" oninput="localStorage.setItem('tp',this.value);sList()">${esc(localStorage.getItem('tp')||DEF)}</textarea>
-<p class="mu">{data} is replaced with each student's ${H.type=='m'?'subject-wise marks &amp; total':'working days, present days &amp; %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Press <b>Send</b> on a student: that student's chat opens in WhatsApp with the message already typed — press the green send arrow there, come back, and press the next student. WhatsApp does not allow a website to press that final arrow for you.</p>
-<p class="row" style="flex:none"><button class="btn wa" onclick="nextS()">▶ Send to next student</button><button class="btn g" onclick="resetSent()">Reset sent status</button></p><p class="mu" id="sc"></p></div><div class="card tw" id="sl"></div><div id="pv"></div>`}
-function dataFor(s){if(H.type=='m'){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.period&&x.scored!==null&&x.scored!=='');if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${Math.round(t/m*100)}%)*`}
-const r=S.att.find(x=>x.sid==s.id&&x.ym==H.period);if(!r)return null;const pc=Math.round(r.present/r.working*100);return `Working days: ${r.working}\nDays present: ${r.present}\n*Attendance: ${pc}%*`+(pc<75?'\n⚠️ Attendance is below 75%.':'')}
-function msg(s){const d=dataFor(s);let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';return t.replace(/{name}/g,()=>s.name).replace(/{college}/g,()=>COLLEGE).replace(/{period}/g,()=>pl(H.period)).replace(/{type}/g,()=>H.type=='m'?'marks':'attendance').replace(/{data}/g,()=>d)}
+<p class="mu">{data} is replaced automatically with each student's ${H.m&&H.a?'marks and attendance':H.m?'subject-wise marks &amp; total':'working days, present days &amp; %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Press <b>Send</b> on a student: that chat opens with the message typed — press WhatsApp's green send arrow, come back, and press the next student. WhatsApp does not let a website press that last arrow for you.</p>
+<p class="row" style="flex:none"><button class="btn wa" onclick="nextS()">▶ Send to next student</button><button class="btn g" onclick="refreshS()">↻ Refresh data</button><button class="btn g" onclick="resetSent()">Reset sent status</button></p><p class="mu" id="sc"></p></div><div class="card tw" id="sl"></div><div id="pv"></div>`}
+function mData(s){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.exam&&x.scored!==null&&x.scored!=='');if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${m?Math.round(t/m*100):0}%)*`}
+function aData(s){const r=S.att.find(x=>x.sid==s.id&&x.ym==H.month);if(!r)return null;const pc=+r.working?Math.round(r.present/r.working*100):0;return `Working days: ${r.working}\nDays present: ${r.present}\n*Attendance: ${pc}%*`+(pc<75?'\n⚠️ Attendance is below 75%.':'')}
+function dataFor(s){const m=H.m?mData(s):null,a=H.a?aData(s):null;if(m===null&&a===null)return null;
+ if(H.m&&H.a)return [m!==null?`📘 *Marks – ${H.exam}*\n${m}`:'',a!==null?`📅 *Attendance – ${mon(H.month)}*\n${a}`:''].filter(Boolean).join('\n\n');
+ return m!==null?m:a}
+const missing=s=>[H.m&&mData(s)===null?'marks':'',H.a&&aData(s)===null?'attendance':''].filter(Boolean);
+function msg(s){const d=dataFor(s);let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';
+ const type=H.m&&H.a?'marks & attendance':H.m?'marks':'attendance',per=[H.m?H.exam:'',H.a?mon(H.month):''].filter(Boolean).join(' · ');
+ return t.replace(/{name}/g,()=>s.name).replace(/{college}/g,()=>COLLEGE).replace(/{period}/g,()=>per).replace(/{type}/g,()=>type).replace(/{data}/g,()=>d)}
 function link(s){const d=dataFor(s),n=ph(s.phone);if(d===null||!n)return null;const t=encodeURIComponent(msg(s));return H.mode=='app'?'https://wa.me/'+n+'?text='+t:'https://web.whatsapp.com/send?phone='+n+'&text='+t}
 const tgt=()=>H.mode=='app'?'_blank':'whatsapp_web';
 function st(s){if(dataFor(s)===null)return 'nodata';if(!ph(s.phone))return 'badnum';return H.sent[s.id]?'sent':'ready'}
-function sList(){const rows=S.students.map(s=>({s,k:st(s)})),c=k=>rows.filter(r=>r.k==k).length,w=H.type=='m'?'marks':'attendance';
-$('#sc').innerHTML=`<b>${c('sent')}</b> sent · <b>${c('ready')}</b> ready · <b>${c('nodata')}</b> no ${w} entered · <b>${c('badnum')}</b> invalid number`;
-$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th>Status</th><th></th></tr>'+rows.map(({s,k})=>{let act='',status='';
-if(k=='nodata'){status=`<span class="bad">No ${w} for this ${H.type=='m'?'exam':'month'}</span>`;act=`<button class="btn g" onclick="goData()">Enter ${w}</button>`}
+function sList(){const rows=S.students.map(s=>({s,k:st(s)})),c=k=>rows.filter(r=>r.k==k).length;
+$('#sc').innerHTML=`<b>${c('sent')}</b> sent · <b>${c('ready')}</b> ready · <b>${c('nodata')}</b> nothing to send · <b>${c('badnum')}</b> invalid number`;
+$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th>Status</th><th></th></tr>'+rows.map(({s,k})=>{let act='',status='';const ms=missing(s);
+if(k=='nodata'){status=`<span class="bad">No ${ms.join(' / ')} saved</span>`;act=`<button class="btn g" onclick="goData('${ms[0]}')">Enter ${ms[0]}</button>`}
 else if(k=='badnum'){status='<span class="bad">Invalid number</span>'}
-else{status=k=='sent'?'<span class="ok">Sent ✓</span>':'<span class="mu">Ready</span>';act=`<a class="btn ${k=='sent'?'sent':'wa'}" target="${tgt()}" href="${esc(link(s))}" onclick="markSent(${s.id})">${k=='sent'?'Send again':'💬 Send'}</a> <button class="btn g" onclick="showPv(${s.id})">Preview</button>`}
+else{status=(k=='sent'?'<span class="ok">Sent ✓</span>':'<span class="mu">Ready</span>')+(ms.length?` <span class="bad">· no ${ms.join(' / ')}</span>`:'');act=`<a class="btn ${k=='sent'?'sent':'wa'}" target="${tgt()}" href="${esc(link(s))}" onclick="markSent(${s.id})">${k=='sent'?'Send again':'💬 Send'}</a> <button class="btn g" onclick="showPv(${s.id})">Preview</button>`}
 return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone)}</td><td>${status}</td><td>${act}</td></tr>`}).join('')+'</table>'}
 function markSent(id){H.sent[id]=1;saveSent();setTimeout(sList,200)}
 function nextS(){const s=S.students.find(s=>!H.sent[s.id]&&link(s));if(!s)return toast('All done ✓');window.open(link(s),tgt());H.sent[s.id]=1;saveSent();sList();toast('Chat opened for '+s.name+' — press send in WhatsApp')}
-function resetSent(){if(!confirm('Mark everyone as not sent for this list?'))return;H.sent={};saveSent();sList()}
+function resetSent(){if(!confirm('Mark everyone as not sent for this selection?'))return;H.sent={};saveSent();sList()}
 function showPv(id){const s=S.students.find(x=>x.id==id);$('#pv').innerHTML=`<div class="card"><h2>Preview — ${esc(s.name)}</h2><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(msg(s))}</pre><p><button class="btn g" onclick="$('#pv').innerHTML=''">Close</button></p></div>`;$('#pv').scrollIntoView({behavior:'smooth'})}
-function goData(){if(H.type=='m'){tab='mrk';M.exam=H.period;loadEx(H.period)}else{tab='att';A.ym=H.period}draw()}
+function goData(w){if(w=='marks'){tab='mrk';M.exam=H.exam;loadEx(H.exam)}else{tab='att';A.ym=H.month||A.ym}draw()}
 init();
 </script></body></html>
