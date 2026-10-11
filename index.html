@@ -31,6 +31,7 @@ td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:
 <header><img src="logo.jpg" alt="Logo"><div><small>Viswasai Educational Society</small><h1>Viswasai Junior College</h1><small>RR Campus · Nellore</small></div><button id="lo" class="btn g" style="margin-left:auto;display:none" onclick="logout()">Logout</button></header>
 <nav id="nav"></nav><main id="app"></main><div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* ====== STEP 1: PASTE YOUR SUPABASE DETAILS HERE (Project Settings > API) ====== */
 const SUPABASE_URL='https://hltdowhcjeyfdximbqru.supabase.co';
@@ -70,10 +71,31 @@ function draw(){$('#nav').innerHTML=T.map(([k,l])=>`<button class="${k==tab?'on'
 /* STUDENTS */
 function vStu(){return `<div class="card"><h2>Add students</h2><div class="row"><div><label>Name</label><input id="sn"></div><div><label>Roll no.</label><input id="sr"></div><div><label>WhatsApp number</label><input id="sp" inputmode="tel"></div></div>
 <p><button class="btn" onclick="addS()">Add student</button></p><label>Or paste many — one per line: Name, Contact (Excel copy works)</label><textarea id="bulk" placeholder="Ravi Kumar, 9876543210"></textarea><p><button class="btn g" onclick="bulk()">Import list</button></p></div>
+<div class="card"><h2>Import from Excel</h2><p class="mu" style="margin-top:0">Upload an Excel (.xlsx, .xls) or CSV file. Put headings in the first row: <b>Name</b>, <b>Roll No</b>, <b>WhatsApp Number</b>. You can check the list before it is saved.</p><label>Choose file</label><input type="file" id="xf" accept=".xlsx,.xls,.csv" onchange="xRead(this)"><p><button class="btn g" onclick="xTpl()">⬇ Download sample Excel</button></p><div id="xp"></div></div>
 <div class="card"><h2>Students (${S.students.length})</h2><div class="tw"><table><tr><th>Name</th><th>Roll</th><th>Contact</th><th></th></tr>${S.students.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.roll)}</td><td>${esc(s.phone)}</td><td><button class="btn x" onclick="delS(${s.id})">Delete</button></td></tr>`).join('')}</table></div></div>`}
 async function addS(){const n=$('#sn').value.trim();if(!n)return;await api('addStudents',{list:[{name:n,phone:$('#sp').value.trim(),roll:$('#sr').value.trim()}]});await reload();draw();toast('Student added')}
 async function bulk(){const list=$('#bulk').value.split('\n').map(l=>l.split(/[,\t]/).map(x=>x.trim())).filter(a=>a[0]).map(a=>({name:a[0],phone:a[1]||'',roll:''}));if(!list.length)return;await api('addStudents',{list});await reload();draw();toast(list.length+' students imported')}
 async function delS(id){if(!confirm('Delete student and all their records?'))return;await api('delStudent',{id});await reload();draw()}
+/* EXCEL IMPORT */
+const X={rows:[]};
+const xc=v=>String(v??'').trim();
+function xTpl(){if(!window.XLSX)return alert('Excel library could not load. Check your internet and refresh the page.');const ws=XLSX.utils.aoa_to_sheet([['Name','Roll No','WhatsApp Number'],['Ravi Kumar','1','9876543210'],['Anita Sharma','2','9123456780']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Students');XLSX.writeFile(wb,'students_template.xlsx')}
+async function xRead(inp){const f=inp.files[0];if(!f)return;if(!window.XLSX)return alert('Excel library could not load. Check your internet and refresh the page.');
+ let rows;try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).filter(r=>r.some(c=>xc(c)!==''))}catch(e){return alert('Could not read this file: '+e.message)}
+ if(!rows.length)return alert('The file is empty.');
+ const ci={n:-1,r:-1,p:-1};rows[0].forEach((h,i)=>{h=xc(h);if(/roll|reg|adm|^id$/i.test(h)){if(ci.r<0)ci.r=i}else if(/phone|mobile|contact|whatsapp|number|cell|mob/i.test(h)){if(ci.p<0)ci.p=i}else if(/name|student/i.test(h)){if(ci.n<0)ci.n=i}});
+ const hasHead=ci.n>=0,list=[];
+ for(const r of rows.slice(hasHead?1:0)){let name,roll='',phone='';
+  if(hasHead){name=xc(r[ci.n]);roll=ci.r>=0?xc(r[ci.r]):'';phone=ci.p>=0?xc(r[ci.p]):''}
+  else{name=xc(r[0]);r.slice(1).forEach(c=>{c=xc(c);if(!c)return;if(c.replace(/\D/g,'').length>=10&&!phone)phone=c;else if(!roll)roll=c})}
+  name=name.replace(/\s+/g,' ');if(!name)continue;list.push({name,roll,phone:phone.replace(/\D/g,'')})}
+ const key=s=>s.name.toLowerCase()+'|'+(s.phone||'');const have=new Set(S.students.map(s=>key({name:s.name.replace(/\s+/g,' '),phone:String(s.phone||'').replace(/\D/g,'')})));
+ list.forEach(s=>{const k=key(s);s.st=have.has(k)?'dup':'ok';have.add(k)});
+ X.rows=list;xShow()}
+function xShow(){const ok=X.rows.filter(r=>r.st=='ok'),dup=X.rows.length-ok.length;
+ $('#xp').innerHTML=`<p><b>${X.rows.length}</b> rows found · <b>${ok.length}</b> new · <b>${dup}</b> already in list (skipped)</p><div class="tw"><table><tr><th>Name</th><th>Roll</th><th>Contact</th><th>Status</th></tr>${X.rows.slice(0,100).map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.roll)}</td><td>${esc(r.phone)}</td><td>${r.st=='dup'?'<span class="mu">Already exists – skipped</span>':'<span class="ok">New</span>'}${r.phone&&!ph(r.phone)?' <span class="bad">· check number</span>':!r.phone?' <span class="bad">· no number</span>':''}</td></tr>`).join('')}</table></div>${X.rows.length>100?`<p class="mu">Showing first 100 of ${X.rows.length} rows.</p>`:''}<p class="row" style="flex:none"><button class="btn" onclick="xGo()" ${ok.length?'':'disabled'}>Import ${ok.length} students</button><button class="btn g" onclick="xCancel()">Cancel</button></p>`}
+function xCancel(){X.rows=[];$('#xp').innerHTML='';$('#xf').value=''}
+async function xGo(){const list=X.rows.filter(r=>r.st=='ok').map(({name,roll,phone})=>({name,roll,phone}));if(!list.length)return;for(let i=0;i<list.length;i+=500)await api('addStudents',{list:list.slice(i,i+500)});X.rows=[];await reload();draw();toast(list.length+' students imported')}
 /* MARKS */
 function vMrk(){const ex=[...new Set(S.marks.map(r=>r.exam))];return `<div class="card"><h2>Weekly marks</h2><label>Exam / Week name</label><input id="ex" list="exl" value="${esc(M.exam)}" placeholder="e.g. Weekly Test 3" onchange="loadEx(this.value)"><datalist id="exl">${ex.map(e=>`<option>${esc(e)}</option>`).join('')}</datalist>
 <label>Subjects &amp; total marks</label><div id="subs">${M.subs.map(subRow).join('')}</div><p class="row" style="flex:none"><button class="btn g" onclick="M.subs.push({n:'',max:100});draw()">+ Add subject</button><button class="btn" onclick="saveM()">Save marks</button></p></div><div class="card tw" id="mt"></div>`}
