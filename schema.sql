@@ -1,0 +1,12 @@
+create table students(id bigint generated always as identity primary key, name text not null, phone text, roll text);
+create table marks(id bigint generated always as identity primary key, sid bigint not null references students(id) on delete cascade, exam text not null, subject text not null, max_marks numeric not null, scored numeric, unique(sid,exam,subject));
+create table attendance(id bigint generated always as identity primary key, sid bigint not null references students(id) on delete cascade, ym text not null, working int not null, present int not null, unique(sid,ym));
+alter table students enable row level security;
+alter table marks enable row level security;
+alter table attendance enable row level security;
+create policy "logged in only" on students for all to authenticated using (true) with check (true);
+create policy "logged in only" on marks for all to authenticated using (true) with check (true);
+create policy "logged in only" on attendance for all to authenticated using (true) with check (true);
+create table share_log(id bigint generated always as identity primary key, sid bigint not null references students(id) on delete cascade, kind text not null, period text not null, shared_at timestamptz default now());
+alter table share_log enable row level security;
+create policy "logged in only" on share_log for all to authenticated using (true) with check (true);
