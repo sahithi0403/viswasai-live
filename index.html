@@ -28,76 +28,43 @@ td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:
 .mu{color:var(--mu);font-size:13px}.tot{color:var(--gold2);font-weight:600}.bad{color:var(--bad)}.ok{color:var(--ok)}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#142046;border:1px solid var(--gold);padding:10px 20px;border-radius:999px;display:none;z-index:20}
 </style></head><body>
-<header><img src="logo.jpg" alt="Logo"><div><small>Viswasai Educational Society</small><h1>Viswasai Junior College</h1><small>RR Campus · Nellore</small></div><button id="lo" class="btn g" style="margin-left:auto;display:none" onclick="logout()">Logout</button></header>
+<header><img src="logo.jpg" alt="Logo"><div><small>Viswasai Educational Society</small><h1>Viswasai Junior College</h1><small>RR Campus · Nellore</small></div><button class="btn g" style="margin-left:auto" onclick="logout()">Logout</button></header>
 <nav id="nav"></nav><main id="app"></main><div id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
-/* ====== STEP 1: PASTE YOUR SUPABASE DETAILS HERE (Project Settings > API) ====== */
-const SUPABASE_URL='https://hltdowhcjeyfdximbqru.supabase.co';
-const SUPABASE_KEY='sb_publishable_RV5ew6O36AhF1k2wIEJwEg_hG9eqaWF';
-/* ================================================================================ */
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const COLLEGE='Viswasai Junior College, RR Campus, Nellore';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let S={students:[],marks:[],att:[]},tab='stu';
-const M={exam:'',subs:[{n:'',max:100}],sc:{}},A={ym:new Date().toISOString().slice(0,7),ed:{}},H={type:'b',exam:'',month:'',sent:{}};
-const DEF="Dear Parent,\n\nGreetings from *{college}*.\n\n📋 Here is the {type} report of *{name}* ({period}):\n\n{data}\n\nKindly review and contact the college for any queries.\n\nRegards,\nJunior Lecturer";
+let S={students:[],marks:[],att:[],log:[]},tab='stu';
+const M={exam:'',subs:[{n:'',max:100}],sc:{}},A={ym:new Date().toISOString().slice(0,7),ed:{}},H={type:'m',period:'',sent:{}};
+const DEF="Dear Parent,\n\nGreetings from {college}.\nHere is the {type} report of {name} ({period}):\n\n{data}\n\nKindly review and contact the college for any queries.\n\nRegards,\nJunior Lecturer";
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)};
-const ck=r=>{if(r.error)throw new Error(r.error.message);return r.data};
-async function fetchAll(table,cols){let all=[],from=0;const N=1000;for(;;){const d=ck(await sb.from(table).select(cols).order('id').range(from,from+N-1));all=all.concat(d);if(d.length<N)break;from+=N}return all}
+const SUPABASE_URL='https://hltdowhcjeyfdximbqru.supabase.co',SUPABASE_KEY='sb_publishable_RV5ew6O36AhF1k2wIEJwEg_hG9eqaWF';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const chk=r=>{if(r.error)throw r.error;return r.data};
+async function all(t,c){let o=[],i=0;for(;;){const d=chk(await sb.from(t).select(c).order('id').range(i,i+999));o=o.concat(d);if(d.length<1000)return o;i+=1000}}
 async function api(a,b){
- if(a=='load'){const [students,marks,att]=await Promise.all([fetchAll('students','*'),fetchAll('marks','sid,exam,subject,max_marks,scored'),fetchAll('attendance','sid,ym,working,present')]);
-  students.sort((x,y)=>String(x.roll||'').localeCompare(String(y.roll||''),undefined,{numeric:true})||x.name.localeCompare(y.name));return {students,marks,att}}
- if(a=='addStudents'){ck(await sb.from('students').insert(b.list));return {ok:1}}
- if(a=='delStudent'){ck(await sb.from('students').delete().eq('id',b.id));return {ok:1}}
- if(a=='saveMarks'){ck(await sb.rpc('save_marks',{p_exam:b.exam,p_rows:b.rows}));return {ok:1}}
- if(a=='delAtt'){let q=sb.from('attendance').delete().eq('ym',b.ym);if(b.sid)q=q.eq('sid',b.sid);ck(await q);return {ok:1}}
- if(a=='saveAtt'){ck(await sb.from('attendance').upsert(b.rows.map(r=>({sid:+r.id,ym:b.ym,working:r.w,present:r.p})),{onConflict:'sid,ym'}));return {ok:1}}
- throw new Error('Unknown action')}
-async function reload(){S=await api("load")}
-async function init(){
- if(SUPABASE_URL.startsWith('PASTE')){$('#app').innerHTML='<div class="card"><h2>Setup needed</h2><p class="mu">Open index.html and paste your Supabase URL and key at the top of the script.</p></div>';return}
- const {data:{session}}=await sb.auth.getSession();
- if(!session)return showLogin();
- await start()}
-async function start(){$('#lo').style.display='';try{await reload()}catch(e){alert('Database error: '+e.message+'\nCheck your Supabase URL/key, that setup SQL was run, and that the project is not paused.')}draw()}
-function showLogin(){$('#lo').style.display='none';$('#nav').innerHTML='';$('#app').innerHTML=`<div class="card" style="max-width:420px;margin:40px auto"><h2>Teacher login</h2><form onsubmit="return doLogin(event)"><label>Email</label><input id="em" type="email" autocomplete="username" required><label>Password</label><input id="pw" type="password" autocomplete="current-password" required><p><button class="btn" type="submit">Login</button></p></form></div>`}
-async function doLogin(e){e.preventDefault();const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});if(error)return alert('Login failed: '+error.message);await start();return false}
-async function logout(){await sb.auth.signOut();S={students:[],marks:[],att:[]};showLogin()}
-window.addEventListener('unhandledrejection',e=>alert('Error: '+(e.reason&&e.reason.message||e.reason)));
+ if(a=='load')return{students:chk(await sb.from('students').select('*').order('roll').order('name')),marks:await all('marks','id,sid,exam,subject,max_marks,scored'),att:await all('attendance','id,sid,ym,working,present'),log:await all('share_log','id,sid,kind,period,shared_at')};
+ if(a=='logShare')return chk(await sb.from('share_log').insert(b).select().single());
+ if(a=='addStudents')return chk(await sb.from('students').insert(b.list));
+ if(a=='delStudent')return chk(await sb.from('students').delete().eq('id',b.id));
+ if(a=='saveMarks'){chk(await sb.from('marks').delete().eq('exam',b.exam));return chk(await sb.from('marks').insert(b.rows.map(r=>({sid:r.sid,exam:b.exam,subject:r.subject,max_marks:r.max,scored:r.scored}))))}
+ if(a=='saveAtt')return chk(await sb.from('attendance').upsert(b.rows.map(r=>({sid:+r.id,ym:b.ym,working:r.w,present:r.p})),{onConflict:'sid,ym'}))}
+async function reload(){S=await api('load')}
+async function init(){const{data}=await sb.auth.getSession();if(!data.session)return loginView();try{await reload();const ex=exams();if(ex.length)loadEx(ex[ex.length-1])}catch(e){alert('Database error: '+(e.message||e))}draw()}
+function loginView(){$('#nav').innerHTML='';$('#app').innerHTML=`<div class="card" style="max-width:420px;margin:40px auto"><h2>Lecturer login</h2><label>Email</label><input id="em" type="email"><label>Password</label><input id="pw" type="password" onkeydown="if(event.key=='Enter')login()"><p><button class="btn" onclick="login()">Login</button></p></div>`}
+async function login(){const r=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});if(r.error)return alert(r.error.message);init()}
+async function logout(){await sb.auth.signOut();loginView()}
 const T=[['stu','Students'],['mrk','Marks'],['att','Attendance'],['shr','Share']];
 function draw(){$('#nav').innerHTML=T.map(([k,l])=>`<button class="${k==tab?'on':''}" onclick="tab='${k}';draw()">${l}</button>`).join('');$('#app').innerHTML={stu:vStu,mrk:vMrk,att:vAtt,shr:vShr}[tab]();if(tab=='mrk')mTable();if(tab=='att')aTable();if(tab=='shr')sList()}
 /* STUDENTS */
 function vStu(){return `<div class="card"><h2>Add students</h2><div class="row"><div><label>Name</label><input id="sn"></div><div><label>Roll no.</label><input id="sr"></div><div><label>WhatsApp number</label><input id="sp" inputmode="tel"></div></div>
 <p><button class="btn" onclick="addS()">Add student</button></p><label>Or paste many — one per line: Name, Contact (Excel copy works)</label><textarea id="bulk" placeholder="Ravi Kumar, 9876543210"></textarea><p><button class="btn g" onclick="bulk()">Import list</button></p></div>
-<div class="card"><h2>Import from Excel</h2><p class="mu" style="margin-top:0">Upload an Excel (.xlsx, .xls) or CSV file. Put headings in the first row: <b>Name</b>, <b>Roll No</b>, <b>WhatsApp Number</b>. You can check the list before it is saved.</p><label>Choose file</label><input type="file" id="xf" accept=".xlsx,.xls,.csv" onchange="xRead(this)"><p><button class="btn g" onclick="xTpl()">⬇ Download sample Excel</button></p><div id="xp"></div></div>
 <div class="card"><h2>Students (${S.students.length})</h2><div class="tw"><table><tr><th>Name</th><th>Roll</th><th>Contact</th><th></th></tr>${S.students.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.roll)}</td><td>${esc(s.phone)}</td><td><button class="btn x" onclick="delS(${s.id})">Delete</button></td></tr>`).join('')}</table></div></div>`}
 async function addS(){const n=$('#sn').value.trim();if(!n)return;await api('addStudents',{list:[{name:n,phone:$('#sp').value.trim(),roll:$('#sr').value.trim()}]});await reload();draw();toast('Student added')}
 async function bulk(){const list=$('#bulk').value.split('\n').map(l=>l.split(/[,\t]/).map(x=>x.trim())).filter(a=>a[0]).map(a=>({name:a[0],phone:a[1]||'',roll:''}));if(!list.length)return;await api('addStudents',{list});await reload();draw();toast(list.length+' students imported')}
 async function delS(id){if(!confirm('Delete student and all their records?'))return;await api('delStudent',{id});await reload();draw()}
-/* EXCEL IMPORT */
-const X={rows:[]};
-const xc=v=>String(v??'').trim();
-function xTpl(){if(!window.XLSX)return alert('Excel library could not load. Check your internet and refresh the page.');const ws=XLSX.utils.aoa_to_sheet([['Name','Roll No','WhatsApp Number'],['Ravi Kumar','1','9876543210'],['Anita Sharma','2','9123456780']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Students');XLSX.writeFile(wb,'students_template.xlsx')}
-async function xRead(inp){const f=inp.files[0];if(!f)return;if(!window.XLSX)return alert('Excel library could not load. Check your internet and refresh the page.');
- let rows;try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}).filter(r=>r.some(c=>xc(c)!==''))}catch(e){return alert('Could not read this file: '+e.message)}
- if(!rows.length)return alert('The file is empty.');
- const ci={n:-1,r:-1,p:-1};rows[0].forEach((h,i)=>{h=xc(h);if(/roll|reg|adm|^id$/i.test(h)){if(ci.r<0)ci.r=i}else if(/phone|mobile|contact|whatsapp|number|cell|mob/i.test(h)){if(ci.p<0)ci.p=i}else if(/name|student/i.test(h)){if(ci.n<0)ci.n=i}});
- const hasHead=ci.n>=0,list=[];
- for(const r of rows.slice(hasHead?1:0)){let name,roll='',phone='';
-  if(hasHead){name=xc(r[ci.n]);roll=ci.r>=0?xc(r[ci.r]):'';phone=ci.p>=0?xc(r[ci.p]):''}
-  else{name=xc(r[0]);r.slice(1).forEach(c=>{c=xc(c);if(!c)return;if(c.replace(/\D/g,'').length>=10&&!phone)phone=c;else if(!roll)roll=c})}
-  name=name.replace(/\s+/g,' ');if(!name)continue;list.push({name,roll,phone:phone.replace(/\D/g,'')})}
- const key=s=>s.name.toLowerCase()+'|'+(s.phone||'');const have=new Set(S.students.map(s=>key({name:s.name.replace(/\s+/g,' '),phone:String(s.phone||'').replace(/\D/g,'')})));
- list.forEach(s=>{const k=key(s);s.st=have.has(k)?'dup':'ok';have.add(k)});
- X.rows=list;xShow()}
-function xShow(){const ok=X.rows.filter(r=>r.st=='ok'),dup=X.rows.length-ok.length;
- $('#xp').innerHTML=`<p><b>${X.rows.length}</b> rows found · <b>${ok.length}</b> new · <b>${dup}</b> already in list (skipped)</p><div class="tw"><table><tr><th>Name</th><th>Roll</th><th>Contact</th><th>Status</th></tr>${X.rows.slice(0,100).map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.roll)}</td><td>${esc(r.phone)}</td><td>${r.st=='dup'?'<span class="mu">Already exists – skipped</span>':'<span class="ok">New</span>'}${r.phone&&!ph(r.phone)?' <span class="bad">· check number</span>':!r.phone?' <span class="bad">· no number</span>':''}</td></tr>`).join('')}</table></div>${X.rows.length>100?`<p class="mu">Showing first 100 of ${X.rows.length} rows.</p>`:''}<p class="row" style="flex:none"><button class="btn" onclick="xGo()" ${ok.length?'':'disabled'}>Import ${ok.length} students</button><button class="btn g" onclick="xCancel()">Cancel</button></p>`}
-function xCancel(){X.rows=[];$('#xp').innerHTML='';$('#xf').value=''}
-async function xGo(){const list=X.rows.filter(r=>r.st=='ok').map(({name,roll,phone})=>({name,roll,phone}));if(!list.length)return;for(let i=0;i<list.length;i+=500)await api('addStudents',{list:list.slice(i,i+500)});X.rows=[];await reload();draw();toast(list.length+' students imported')}
 /* MARKS */
-function vMrk(){const ex=[...new Set(S.marks.map(r=>r.exam))];return `<div class="card"><h2>Weekly marks</h2><label>Exam / Week name</label><input id="ex" list="exl" value="${esc(M.exam)}" placeholder="e.g. Weekly Test 3" onchange="loadEx(this.value)"><datalist id="exl">${ex.map(e=>`<option>${esc(e)}</option>`).join('')}</datalist>
+function vMrk(){const ex=[...new Set(S.marks.map(r=>r.exam))];return `<div class="card"><h2>Weekly marks</h2><label>Exam / Week name</label><input id="ex" list="exl" value="${esc(M.exam)}" placeholder="e.g. Weekly Test 3" onchange="loadEx(this.value)"><datalist id="exl">${ex.map(e=>`<option>${esc(e)}</option>`).join('')}</datalist><label>Saved exams — tap to open</label><div class="row" style="gap:6px">${ex.map((e,i)=>`<button class="btn ${e==M.exam?'':'g'}" style="flex:none;padding:6px 12px" onclick="loadEx(exams()[${i}])">${esc(e)}</button>`).join('')||'<span class="mu">Nothing saved yet</span>'}</div>
 <label>Subjects &amp; total marks</label><div id="subs">${M.subs.map(subRow).join('')}</div><p class="row" style="flex:none"><button class="btn g" onclick="M.subs.push({n:'',max:100});draw()">+ Add subject</button><button class="btn" onclick="saveM()">Save marks</button></p></div><div class="card tw" id="mt"></div>`}
 const subRow=(s,i)=>`<div class="sub"><input placeholder="Subject" value="${esc(s.n)}" onchange="M.subs[${i}].n=this.value;mTable()"><input type="number" placeholder="Max" value="${s.max}" onchange="M.subs[${i}].max=+this.value;mTable()"><button class="btn x" onclick="M.subs.splice(${i},1);draw()">✕</button></div>`;
 function loadEx(n){M.exam=n.trim();const rows=S.marks.filter(r=>r.exam==M.exam);if(!rows.length)return;const names=[...new Set(rows.map(r=>r.subject))];M.subs=names.map(x=>({n:x,max:+rows.find(r=>r.subject==x).max_marks}));M.sc={};rows.forEach(r=>{if(r.scored!==null)(M.sc[r.sid]=M.sc[r.sid]||{})[names.indexOf(r.subject)]=+r.scored});draw()}
@@ -108,55 +75,28 @@ function setM(id,i,v){(M.sc[id]=M.sc[id]||{});if(v==='')delete M.sc[id][i];else 
 async function saveM(){if(!M.exam)return alert('Enter exam / week name');const subs=M.subs.filter(s=>s.n.trim());if(!subs.length)return alert('Add at least one subject');const rows=[];S.students.forEach(s=>M.subs.forEach((x,i)=>{if(x.n.trim())rows.push({sid:s.id,subject:x.n.trim(),max:x.max,scored:(M.sc[s.id]||{})[i]??null})}));await api('saveMarks',{exam:M.exam,rows});await reload();draw();toast('Marks saved ✓')}
 /* ATTENDANCE */
 const getAtt=id=>S.att.find(r=>r.sid==id&&r.ym==A.ym);
-function vAtt(){A.ed={};S.students.forEach(s=>{const r=getAtt(s.id);if(r)A.ed[s.id]={w:+r.working,p:+r.present}});return `<div class="card"><h2>Monthly attendance</h2><div class="row"><div><label>Month</label><input type="month" id="ym" value="${A.ym}" onchange="A.ym=this.value;draw()"></div><div><label>Working days (apply to all)</label><div class="row"><input type="number" id="wd" style="min-width:80px"><button class="btn g" style="flex:none" onclick="applyW()">Apply</button></div></div></div><p class="row" style="flex:none"><button class="btn" onclick="saveA()">Save attendance</button><button class="btn x" onclick="delMonth()">Delete whole month</button></p></div><div class="card tw" id="at"></div><div class="card tw"><h2>${A.ym.slice(0,4)} overview <span class="mu">(present / working)</span></h2>${yearTbl()}</div>`}
-function aTable(){$('#at').innerHTML='<table><tr><th>Student</th><th>Working days</th><th>Present</th><th>%</th><th></th></tr>'+S.students.map(s=>{const e=A.ed[s.id]||{};return `<tr><td>${esc(s.name)}</td><td><input type="number" id="w${s.id}" value="${e.w??''}" oninput="setA(${s.id})"></td><td><input type="number" id="p${s.id}" value="${e.p??''}" oninput="setA(${s.id})"></td><td id="ap${s.id}" class="tot"></td><td>${getAtt(s.id)?`<button class="btn x" onclick="delA(${s.id})">Delete</button>`:''}</td></tr>`}).join('')+'</table>';S.students.forEach(s=>setA(s.id))}
+function vAtt(){A.ed={};S.students.forEach(s=>{const r=getAtt(s.id);if(r)A.ed[s.id]={w:+r.working,p:+r.present}});return `<div class="card"><h2>Monthly attendance</h2><div class="row"><div><label>Month</label><input type="month" id="ym" value="${A.ym}" onchange="A.ym=this.value;draw()"></div><div><label>Working days (apply to all)</label><div class="row"><input type="number" id="wd" style="min-width:80px"><button class="btn g" style="flex:none" onclick="applyW()">Apply</button></div></div></div><label>Saved months — tap to open</label><div class="row" style="gap:6px">${months().map((m,i)=>`<button class="btn ${m==A.ym?'':'g'}" style="flex:none;padding:6px 12px" onclick="A.ym=months()[${i}];draw()">${new Date(m+'-01').toLocaleString('en',{month:'short',year:'numeric'})}</button>`).join('')||'<span class="mu">Nothing saved yet</span>'}</div><p><button class="btn" onclick="saveA()">Save attendance</button></p></div><div class="card tw" id="at"></div><div class="card tw"><h2>${A.ym.slice(0,4)} overview <span class="mu">(present / working)</span></h2>${yearTbl()}</div>`}
+function aTable(){$('#at').innerHTML='<table><tr><th>Student</th><th>Working days</th><th>Present</th><th>%</th></tr>'+S.students.map(s=>{const e=A.ed[s.id]||{};return `<tr><td>${esc(s.name)}</td><td><input type="number" id="w${s.id}" value="${e.w??''}" oninput="setA(${s.id})"></td><td><input type="number" id="p${s.id}" value="${e.p??''}" oninput="setA(${s.id})"></td><td id="ap${s.id}" class="tot"></td></tr>`}).join('')+'</table>';S.students.forEach(s=>setA(s.id))}
 function setA(id){const w=$('#w'+id).value,p=$('#p'+id).value;if(w!==''&&p!=='')A.ed[id]={w:+w,p:+p};else delete A.ed[id];const e=$('#ap'+id),pc=w&&p!==''?Math.round(p/w*100):null;e.textContent=pc!=null?pc+'%':'';e.className='tot '+(pc!=null&&pc<75?'bad':'')}
 function applyW(){const v=$('#wd').value;S.students.forEach(s=>{$('#w'+s.id).value=v;setA(s.id)})}
 async function saveA(){const rows=Object.entries(A.ed).map(([id,e])=>({id,w:e.w,p:e.p}));await api('saveAtt',{ym:A.ym,rows});await reload();draw();toast('Attendance saved ✓')}
-async function delA(id){const s=S.students.find(x=>x.id==id);if(!confirm('Delete '+s.name+"'s attendance for "+mon(A.ym)+'?'))return;await api('delAtt',{ym:A.ym,sid:id});await reload();draw();toast('Attendance deleted')}
-async function delMonth(){const n=S.att.filter(r=>r.ym==A.ym).length;if(!n)return toast('No attendance saved for '+mon(A.ym));if(!confirm('Delete attendance of ALL students for '+mon(A.ym)+' ('+n+' records)? This cannot be undone.'))return;await api('delAtt',{ym:A.ym});await reload();draw();toast('Month attendance deleted')}
 function yearTbl(){const y=A.ym.slice(0,4);return '<table><tr><th>Student</th>'+['J','F','M','A','M','J','J','A','S','O','N','D'].map(m=>`<th>${m}</th>`).join('')+'</tr>'+S.students.map(s=>`<tr><td>${esc(s.name)}</td>`+Array.from({length:12},(_,i)=>{const r=S.att.find(a=>a.sid==s.id&&a.ym==y+'-'+String(i+1).padStart(2,'0'));return `<td>${r?r.present+'/'+r.working:'·'}</td>`}).join('')+'</tr>').join('')+'</table>'}
 /* SHARE */
 const exams=()=>[...new Set(S.marks.map(r=>r.exam))],months=()=>[...new Set(S.att.map(r=>r.ym))].sort().reverse();
-const mon=p=>/^\d{4}-\d\d$/.test(p)?new Date(p+'-01').toLocaleString('en',{month:'long',year:'numeric'}):p;
-const skey=()=>'sent:'+(H.m?H.exam:'-')+'|'+(H.a?H.month:'-');
-function loadSent(){try{H.sent=JSON.parse(localStorage.getItem(skey())||'{}')}catch(e){H.sent={}}}
-function saveSent(){try{localStorage.setItem(skey(),JSON.stringify(H.sent))}catch(e){}}
-function ph(p){let d=String(p||'').replace(/\D/g,'').replace(/^0+/,'');if(d.length==10)d='91'+d;return d.length>=11&&d.length<=15?d:''}
-function tgl(k,v){H[k]=v;if(!H.m&&!H.a){H[k]=true;toast('Select at least one: marks or attendance')}draw()}
-async function refreshS(){await reload();draw();toast('Data refreshed ✓')}
-function vShr(){if(H.m===undefined){H.m=true;H.a=false}const ex=exams(),mo=months();if(!ex.includes(H.exam))H.exam=ex[0]||'';if(!mo.includes(H.month))H.month=mo[0]||'';loadSent();H.mode=H.mode||localStorage.getItem('wmode')||'web';
-const ck='style="width:auto;margin-right:8px"';
-return `<div class="card"><h2>Send on WhatsApp</h2><p class="mu" style="margin-top:0">Marks and attendance are taken automatically from the saved records. Tick what you want to send — marks, attendance, or both in one message.</p>
-<div class="row"><div><label><input type="checkbox" ${ck} ${H.m?'checked':''} onchange="tgl('m',this.checked)">Include marks</label><select ${H.m?'':'disabled'} onchange="H.exam=this.value;loadSent();sList()">${ex.map(p=>`<option value="${esc(p)}" ${p==H.exam?'selected':''}>${esc(p)}</option>`).join('')||'<option>No marks saved yet</option>'}</select></div>
-<div><label><input type="checkbox" ${ck} ${H.a?'checked':''} onchange="tgl('a',this.checked)">Include attendance</label><select ${H.a?'':'disabled'} onchange="H.month=this.value;loadSent();sList()">${mo.map(p=>`<option value="${esc(p)}" ${p==H.month?'selected':''}>${esc(mon(p))}</option>`).join('')||'<option>No attendance saved yet</option>'}</select></div>
-<div><label>Open with</label><select onchange="H.mode=this.value;localStorage.setItem('wmode',this.value);sList()"><option value="web" ${H.mode=='web'?'selected':''}>WhatsApp Web (computer)</option><option value="app" ${H.mode=='app'?'selected':''}>WhatsApp app (phone)</option></select></div></div>
+function vShr(){const ps=H.type=='m'?exams():months();if(!ps.includes(H.period))H.period=ps[0]||'';
+return `<div class="card"><h2>Share on WhatsApp</h2><div class="row"><div><label>What to send</label><select onchange="H.type=this.value;H.sent={};draw()"><option value="m" ${H.type=='m'?'selected':''}>Marks</option><option value="a" ${H.type=='a'?'selected':''}>Attendance</option></select></div>
+<div><label>${H.type=='m'?'Exam / Week':'Month'}</label><select onchange="H.period=this.value;H.sent={};sList()">${ps.map(p=>`<option value="${esc(p)}" ${p==H.period?'selected':''}>${esc(pl(p))}</option>`).join('')}</select></div></div>
 <label>Your message — use {name} {data} {period} {type} {college}</label><textarea id="tp" oninput="localStorage.setItem('tp',this.value);sList()">${esc(localStorage.getItem('tp')||DEF)}</textarea>
-<p class="mu">{data} is replaced automatically with each student's ${H.m&&H.a?'marks and attendance':H.m?'subject-wise marks &amp; total':'working days, present days &amp; %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Press <b>Send</b> on a student: that chat opens with the message typed — press WhatsApp's green send arrow, come back, and press the next student. WhatsApp does not let a website press that last arrow for you.</p>
-<p class="row" style="flex:none"><button class="btn wa" onclick="nextS()">▶ Send to next student</button><button class="btn g" onclick="refreshS()">↻ Refresh data</button><button class="btn g" onclick="resetSent()">Reset sent status</button></p><p class="mu" id="sc"></p></div><div class="card tw" id="sl"></div><div id="pv"></div>`}
-function mData(s){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.exam&&x.scored!==null&&x.scored!=='');if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${m?Math.round(t/m*100):0}%)*`}
-function aData(s){const r=S.att.find(x=>x.sid==s.id&&x.ym==H.month);if(!r)return null;const pc=+r.working?Math.round(r.present/r.working*100):0;return `Working days: ${r.working}\nDays present: ${r.present}\n*Attendance: ${pc}%*`+(pc<75?'\n⚠️ Attendance is below 75%.':'')}
-function dataFor(s){const m=H.m?mData(s):null,a=H.a?aData(s):null;if(m===null&&a===null)return null;
- if(H.m&&H.a)return [m!==null?`📘 *Marks – ${H.exam}*\n${m}`:'',a!==null?`📅 *Attendance – ${mon(H.month)}*\n${a}`:''].filter(Boolean).join('\n\n');
- return m!==null?m:a}
-const missing=s=>[H.m&&mData(s)===null?'marks':'',H.a&&aData(s)===null?'attendance':''].filter(Boolean);
-function msg(s){const d=dataFor(s);let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';
- const type=H.m&&H.a?'marks & attendance':H.m?'marks':'attendance',per=[H.m?H.exam:'',H.a?mon(H.month):''].filter(Boolean).join(' · ');
- return t.replace(/{name}/g,()=>s.name).replace(/{college}/g,()=>COLLEGE).replace(/{period}/g,()=>per).replace(/{type}/g,()=>type).replace(/{data}/g,()=>d)}
-function link(s){const d=dataFor(s),n=ph(s.phone);if(d===null||!n)return null;const t=encodeURIComponent(msg(s));return H.mode=='app'?'https://wa.me/'+n+'?text='+t:'https://web.whatsapp.com/send?phone='+n+'&text='+t}
-const tgt=()=>H.mode=='app'?'_blank':'whatsapp_web';
-function st(s){if(dataFor(s)===null)return 'nodata';if(!ph(s.phone))return 'badnum';return H.sent[s.id]?'sent':'ready'}
-function sList(){const rows=S.students.map(s=>({s,k:st(s)})),c=k=>rows.filter(r=>r.k==k).length;
-$('#sc').innerHTML=`<b>${c('sent')}</b> sent · <b>${c('ready')}</b> ready · <b>${c('nodata')}</b> nothing to send · <b>${c('badnum')}</b> invalid number`;
-$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th>Status</th><th></th></tr>'+rows.map(({s,k})=>{let act='',status='';const ms=missing(s);
-if(k=='nodata'){status=`<span class="bad">No ${ms.join(' / ')} saved</span>`;act=`<button class="btn g" onclick="goData('${ms[0]}')">Enter ${ms[0]}</button>`}
-else if(k=='badnum'){status='<span class="bad">Invalid number</span>'}
-else{status=(k=='sent'?'<span class="ok">Sent ✓</span>':'<span class="mu">Ready</span>')+(ms.length?` <span class="bad">· no ${ms.join(' / ')}</span>`:'');act=`<a class="btn ${k=='sent'?'sent':'wa'}" target="${tgt()}" href="${esc(link(s))}" onclick="markSent(${s.id})">${k=='sent'?'Send again':'💬 Send'}</a> <button class="btn g" onclick="showPv(${s.id})">Preview</button>`}
-return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone)}</td><td>${status}</td><td>${act}</td></tr>`}).join('')+'</table>'}
-function markSent(id){H.sent[id]=1;saveSent();setTimeout(sList,200)}
-function nextS(){const s=S.students.find(s=>!H.sent[s.id]&&link(s));if(!s)return toast('All done ✓');window.open(link(s),tgt());H.sent[s.id]=1;saveSent();sList();toast('Chat opened for '+s.name+' — press send in WhatsApp')}
-function resetSent(){if(!confirm('Mark everyone as not sent for this selection?'))return;H.sent={};saveSent();sList()}
-function showPv(id){const s=S.students.find(x=>x.id==id);$('#pv').innerHTML=`<div class="card"><h2>Preview — ${esc(s.name)}</h2><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(msg(s))}</pre><p><button class="btn g" onclick="$('#pv').innerHTML=''">Close</button></p></div>`;$('#pv').scrollIntoView({behavior:'smooth'})}
-function goData(w){if(w=='marks'){tab='mrk';M.exam=H.exam;loadEx(H.exam)}else{tab='att';A.ym=H.month||A.ym}draw()}
+<p class="mu">{data} is replaced with each student's ${H.type=='m'?'subject-wise marks & total':'working days, present days & %'}. Keep <b>WhatsApp Web</b> logged in (scan the QR code once at web.whatsapp.com). Tap <b>Share via WhatsApp</b> on a student: WhatsApp Web opens in one reusable tab with that student's chat and your message ready — press the send arrow there, then come back and tap the next student.</p>
+<p><button class="btn wa" onclick="nextS()">▶ Share with next student</button></p></div><div class="card tw" id="sl"></div>`}
+const pl=p=>H.type=='a'&&/^\d{4}-\d\d$/.test(p)?new Date(p+'-01').toLocaleString('en',{month:'long',year:'numeric'}):p;
+function ph(p){let d=String(p||'').replace(/\D/g,'');if(d.length==10)d='91'+d;return d.length>=11?d:''}
+function dataFor(s){if(H.type=='m'){const r=S.marks.filter(x=>x.sid==s.id&&x.exam==H.period&&x.scored!==null);if(!r.length)return null;let t=0,m=0;const L=r.map(x=>{t+=+x.scored;m+=+x.max_marks;return `• ${x.subject}: ${+x.scored}/${+x.max_marks}`});return L.join('\n')+`\n*Total: ${t}/${m} (${Math.round(t/m*100)}%)*`}
+const r=S.att.find(x=>x.sid==s.id&&x.ym==H.period);if(!r)return null;const pc=Math.round(r.present/r.working*100);return `Working days: ${r.working}\nDays present: ${r.present}\n*Attendance: ${pc}%*`+(pc<75?'\n⚠️ Attendance is below 75%.':'')}
+function link(s){const d=dataFor(s),n=ph(s.phone);if(d===null||!n)return null;let t=$('#tp').value;if(!t.includes('{data}'))t+='\n\n{data}';t=t.replace(/{name}/g,s.name).replace(/{college}/g,COLLEGE).replace(/{period}/g,pl(H.period)).replace(/{type}/g,H.type=='m'?'marks':'attendance').replace(/{data}/g,d);return 'https://web.whatsapp.com/send?phone='+n+'&text='+encodeURIComponent(t)}
+function sList(){$('#sl').innerHTML='<table><tr><th>Student</th><th>Contact</th><th></th></tr>'+S.students.map(s=>{const l=link(s);return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone)}</td><td>${l?`<a class="btn ${shd(s.id)?'sent':'wa'}" target="whatsapp_web" href="${l}" onclick="logShare(${s.id},this)">${(x=>x?'Shared ✓ '+fd(x.shared_at):'💬 Share via WhatsApp')(shd(s.id))}</a>`:`<span class="mu">${dataFor(s)===null?'No data':'Invalid number'}</span>`}</td></tr>`}).join('')+'</table>'}
+const shd=id=>S.log.filter(l=>l.sid==id&&l.kind==H.type&&l.period==H.period).pop(),fd=d=>new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+async function logShare(id,el){if(el){el.className='btn sent';el.textContent='Shared ✓ today'}try{S.log.push(await api('logShare',{sid:id,kind:H.type,period:H.period}))}catch(e){toast('Could not save shared status')}}
+function nextS(){const s=S.students.find(s=>!shd(s.id)&&link(s));if(!s)return toast('All done ✓');window.open(link(s),'whatsapp_web');logShare(s.id).then(sList)}
 init();
 </script></body></html>
